@@ -1,0 +1,8 @@
+# Ignore everything
+*
+
+# Except
+!.gitignore
+!.README.md
+!ftserver.c
+!ftclient.py
