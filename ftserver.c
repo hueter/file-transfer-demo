@@ -32,8 +32,8 @@ int validatePort(char *port)
 	 * This function makes sure the port number from the command line is a valid integer in the correct range
 	 *  Return 1 if validation error, or 0 if it's OK
 	 */
-    int portNo = atoi(port);
-    if ((isdigit(portNo) != 0) || (portNo < 1024) || portNo > 65535 || portNo == 30021 || portNo == 30020)
+    int portNumber = atoi(port);
+    if ((isdigit(portNumber) != 0) || (portNumber < 1024) || portNumber > 65535 || portNumber == 30021 || portNumber == 30020)
     {
         return -1;
     }
@@ -123,28 +123,29 @@ int handleRequest(int sock, char *client)
     recv(sock, clientCommand, 500, 0);
 
     args = parseCommand(clientCommand);
-    while (args[numberOfArgs] != NULL) {
+    while (args[numberOfArgs] != NULL)
+    {
         numberOfArgs++;
     }
 
     if (numberOfArgs == 2)
     {
-        status = validatePort(args[1]);
+        dataPort = atoi(args[1]);
+        status = validatePort(dataPort);
         if (status < 0)
         {
             fprintf(stderr, "Error: Data Port Number must be an integer between 1024 and 65535 and not 30021 or 30020, you passed: '%s'\n", args[1]);
         }
-        dataPort = atoi(args[1]);
         commandType = 1;
     }
     else
     {
-        status = validatePort(args[2]);
+        dataPort = atoi(args[2]);
+        status = validatePort(dataPort);
         if (status < 0)
         {
             fprintf(stderr, "Error: Data Port Number must be an integer between 1024 and 65535 and not 30021 or 30020, you passed: '%s'\n", args[1]);
         }
-        dataPort = atoi(args[2]);
         commandType = 2;
     }
 
@@ -158,18 +159,19 @@ int handleRequest(int sock, char *client)
 
     // setup new socket
     receiver = gethostbyname(client);
-	if (receiver == NULL) {
-		fprintf(stderr, "   ! Connection Error: Client host not reachable.\n");
-		return -1;
-	}
+    if (receiver == NULL)
+    {
+        fprintf(stderr, "   ! Connection Error: Client host not reachable.\n");
+        return -1;
+    }
     // allocate memory for server
-   	bzero((char *) &receiverAddress, sizeof(receiverAddress));
-	// IPv4
+    bzero((char *)&receiverAddress, sizeof(receiverAddress));
+    // IPv4
     receiverAddress.sin_family = AF_INET;
-	// bcopy - copy byte sequence of server address 
+    // bcopy - copy byte sequence of server address
     bcopy((char *)receiver->h_addr, (char *)&receiverAddress.sin_addr.s_addr, receiver->h_length);
-	// Convert multi-byte integer types from host byte order to network byte order 
-	receiverAddress.sin_port = htons(dataPort);
+    // Convert multi-byte integer types from host byte order to network byte order
+    receiverAddress.sin_port = htons(dataPort);
 
     status = connect(dataSocket, (struct sockaddr *)&receiverAddress, sizeof(struct sockaddr));
     if (status < 0)
@@ -192,31 +194,35 @@ int handleRequest(int sock, char *client)
     return 0;
 };
 
-int startup(int port)
+int startup(char *port)
 {
     /**
-	 * This function takes the port number, initializes a server socket, and returns the active socket file descriptor
+	 * This function takes the port number, initializes a server socket, and returns the active socket file descriptor [1]
 	 */
-    struct sockaddr_in serverAddress;
-    int sock;       // socket file descriptor
-    int status;     // generic error response holder
+    int sockfd; // socket file descriptor
+    struct addrinfo hints, *res;
     int optVal = 1; // for socket options
+    int status;     // generic error response holder
+
+    // first, load up address structs with getaddrinfo():
+
+    memset(&hints, 0, sizeof hints);
+    hints.ai_family = AF_UNSPEC; // use IPv4 or IPv6, whichever
+    hints.ai_socktype = SOCK_STREAM;
+    hints.ai_flags = AI_PASSIVE; // fill in my IP for me
+
+    getaddrinfo(NULL, port, &hints, &res);
 
     // Initialize the file descriptor of a new socket [1]
-    sock = socket(AF_INET, SOCK_STREAM, 0);
-    if (sock < 0)
+    sockfd = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
+    if (sockfd < 0)
     {
         fprintf(stderr, "Socket Error: Error initializing socket.\n");
         exit(1);
     }
 
-    // ---- Initial Socket Configuration
-    serverAddress.sin_family = AF_INET;                                  // we're only going to use IPv4 family here
-    serverAddress.sin_port = htons(port);                                // set port, convert to Big-Endian Network Byte Order
-    memset(serverAddress.sin_zero, '\0', sizeof serverAddress.sin_zero); // clear memory for the serverAddress
-
     // this socket option allows other sockets to bind on this port [1]
-    status = setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &optVal, sizeof(int));
+    status = setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &optVal, sizeof(optVal));
     if (status < 0)
     {
         fprintf(stderr, "Socket Error: Error initializing socket reusability.\n");
@@ -224,31 +230,32 @@ int startup(int port)
     }
 
     // this is where we bind our socket to the local port [1]
-    status = bind(sock, (struct sockaddr *)&serverAddress, sizeof(serverAddress));
+    status = bind(sockfd, res->ai_addr, res->ai_addrlen);
+    ;
     if (status < 0)
     {
-        fprintf(stderr, "Socket Error: Error binding host to port %d.\n", port);
+        fprintf(stderr, "Socket Error: Error binding host to port %s.\n", port);
         exit(1);
     }
 
     // now we're actually a server because we're listening to connections (arbitrarily set to 5) [1]
-    status = listen(sock, 5);
+    status = listen(sockfd, 5);
     if (status < 0)
     {
         fprintf(stderr, "Socket Error: Error Setting Up Socket Listener.\n");
         exit(1);
     }
 
-    printf("\nFile Transfer Server Listening on Port %d...\n", port);
+    printf("\nFile Transfer Server Listening on Port %s...\n", port);
 
-    return sock;
+    return sockfd;
 };
 
 int shutDown();
 
 int main(int argc, char **argv)
 {
-    int portNumber;                     // port which we use to start server on
+    char *port;                     // port which we use to start server on
     int controlSocket;                  // the socket which will start listening for connections
     int activeSocket;                   // an instance of controlSocket that is actively accepting connections
     struct sockaddr_storage clientAddr; // store information about the incoming connection
@@ -263,15 +270,19 @@ int main(int argc, char **argv)
     }
 
     // Extra validation for port argument
-    if (validatePort(argv[1]) != 0)
+    port = argv[1];
+    status = validatePort(port);
+    if (status < 0)
     {
         fprintf(stderr, "Error: Port Number must be an integer between 1024 and 65535 and not 30021 or 30020, you passed: '%s'\n", argv[1]);
         exit(1);
     }
-    // after validation, read in port for real
-    portNumber = atoi(argv[1]);
-    // build a listening controlSocket with the startup function
-    controlSocket = startup(portNumber);
+    else
+    {
+        // after validation, read in port for real
+        // build a listening controlSocket with the startup function
+        controlSocket = startup(port);
+    }
 
     while (1)
     {
@@ -297,11 +308,11 @@ int main(int argc, char **argv)
             fprintf(stderr, "   ! Connection Error: There was an error reading hostname.\n");
         }
 
-        status = handleRequest(activeSocket, clientHost);
-        if (status < 0)
-        {
-            fprintf(stderr, "   ! Connection Error: There was an error handling the connection.\n");
-        }
+        // status = handleRequest(activeSocket, clientHost);
+        // if (status < 0)
+        // {
+        //     fprintf(stderr, "   ! Connection Error: There was an error handling the connection.\n");
+        // }
 
         // make sure to cleanup
         close(activeSocket);
