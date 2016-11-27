@@ -31,11 +31,12 @@ class TCPDataHandler(SocketServer.BaseRequestHandler):
     port = 0
     filename = ""
 
-    def receive_directories(data=None):
+    def receive_directories(self):
         """
         This function takes a socket and prints directory contents from server to stdout
         """
-        print("Receiving directory structure from {0}:{1}".format(this.host, this.port))
+        data = self.request.recv(1024).strip()
+        print("Receiving directory structure from {0}:{1}".format(self.host, self.port))
 
         if not data:
             print("Server Error: No directory information received.")
@@ -45,11 +46,12 @@ class TCPDataHandler(SocketServer.BaseRequestHandler):
         # http://stackoverflow.com/questions/10019456/usage-of-sys-stdout-flush-method
         sys.stdout.flush()
 
-    def receive_file(data=None):
+    def receive_file(self):
         """
         This function takes a socket and prints directory contents from server to stdout
         """
-        print("Receiving file '{0}' from {1}:{2}".format(this.filename, this.host, this.port))
+        data = self.request.recv(1024).strip()
+        print("Receiving file '{0}' from {1}:{2}".format(self.filename, self.host, self.port))
 
         if not data:
             # if unhandled error occurs
@@ -69,10 +71,10 @@ class TCPDataHandler(SocketServer.BaseRequestHandler):
     def handle(self):
         # self.request is the TCP socket connected to the client
         if command == "-l":
-            self.receive_directories(data=self.request.recv(1024).strip())
+            self.receive_directories()
 
         elif command == "-g":
-            self.receive_file(data=self.request.recv(1024).strip())
+            self.receive_file()
 
         else:
             print("Invalid command handle triggered.")
@@ -91,7 +93,7 @@ def initiate_contact(host=None, port=None):
         print("Failed to connect to ({0}, {1})".format(host, port))
         sys.exit(1)
 
-    print("! Connected to {0}:{1}.".format(host, port))
+    print("+ Connected to {0}:{1}.".format(host, port))
     return sock
 
 
@@ -105,7 +107,7 @@ def make_request(sock=None, command=None, filename=None, port=None):
     else:
         full_command = "{0} {1}".format(command, data_port)
 
-    print("! --- Issuing Server Command: '{}'".format(full_command))
+    print("   + Issuing Server Command: '{}'".format(full_command))
     sock.send(full_command)
 
 

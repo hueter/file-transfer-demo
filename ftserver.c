@@ -114,7 +114,7 @@ int handleRequest(int sock, char *client)
     int numberOfArgs = 0;
     char **args;
     int dataSocket;
-    int dataPort;
+    char *dataPort;
     struct sockaddr_in receiverAddress;
     struct hostent *receiver;
     int status;
@@ -130,7 +130,7 @@ int handleRequest(int sock, char *client)
 
     if (numberOfArgs == 2)
     {
-        dataPort = atoi(args[1]);
+        dataPort = args[1];
         status = validatePort(dataPort);
         if (status < 0)
         {
@@ -140,7 +140,7 @@ int handleRequest(int sock, char *client)
     }
     else
     {
-        dataPort = atoi(args[2]);
+        dataPort = args[2];
         status = validatePort(dataPort);
         if (status < 0)
         {
@@ -171,12 +171,12 @@ int handleRequest(int sock, char *client)
     // bcopy - copy byte sequence of server address
     bcopy((char *)receiver->h_addr, (char *)&receiverAddress.sin_addr.s_addr, receiver->h_length);
     // Convert multi-byte integer types from host byte order to network byte order
-    receiverAddress.sin_port = htons(dataPort);
+    receiverAddress.sin_port = htons(atoi(dataPort));
 
     status = connect(dataSocket, (struct sockaddr *)&receiverAddress, sizeof(struct sockaddr));
     if (status < 0)
     {
-        printf("   ! Connection Error: Could not establish data connection with %s:%d\n", client, dataPort);
+        printf("   ! Connection Error: Could not establish data connection with %s:%s\n", client, dataPort);
         return -1;
     }
 
@@ -207,7 +207,7 @@ int startup(char *port)
     // first, load up address structs with getaddrinfo():
 
     memset(&hints, 0, sizeof hints);
-    hints.ai_family = AF_UNSPEC; // use IPv4 or IPv6, whichever
+    hints.ai_family = AF_INET; // use IPv4 or IPv6, whichever
     hints.ai_socktype = SOCK_STREAM;
     hints.ai_flags = AI_PASSIVE; // fill in my IP for me
 
@@ -308,11 +308,11 @@ int main(int argc, char **argv)
             fprintf(stderr, "   ! Connection Error: There was an error reading hostname.\n");
         }
 
-        // status = handleRequest(activeSocket, clientHost);
-        // if (status < 0)
-        // {
-        //     fprintf(stderr, "   ! Connection Error: There was an error handling the connection.\n");
-        // }
+        status = handleRequest(activeSocket, clientHost);
+        if (status < 0)
+        {
+            fprintf(stderr, "   ! Connection Error: There was an error handling the connection.\n");
+        }
 
         // make sure to cleanup
         close(activeSocket);
