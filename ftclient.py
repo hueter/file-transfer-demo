@@ -91,7 +91,7 @@ def initiate_contact(host=None, port=None):
         print("Failed to connect to ({0}, {1})".format(host, port))
         sys.exit(1)
 
-    print("Connection Established.")
+    print("! Connected to {0}:{1}.".format(host, port))
     return sock
 
 
@@ -105,7 +105,7 @@ def make_request(sock=None, command=None, filename=None, port=None):
     else:
         full_command = "{0} {1}".format(command, port)
 
-    print("Issuing Server Command: '{}'".format(full_command))
+    print("! --- Issuing Server Command: '{}'".format(full_command))
     sock.send(full_command)
 
 

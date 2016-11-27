@@ -13,6 +13,7 @@
  *  [7] http://pubs.opengroup.org/onlinepubs/009695399/functions/bzero.html
  *  [8] http://stackoverflow.com/questions/12810587/extracting-ip-address-and-port-info-from-sockaddr-storage
  *  [9] http://man7.org/linux/man-pages/man3/getnameinfo.3.html
+ *  [10] http://stackoverflow.com/questions/11198604/c-split-string-into-an-array-of-strings
  **/
 
 #include <stdio.h>
@@ -40,26 +41,63 @@ int validatePort(char *port)
     return 0;
 }
 
-// char **parseCommand(char *command)
-// {
-//     /**
-// 	 * This function takes the command string from the client and parses it into an array
-// 	 *  Returns the string array
-// 	 */
-
-// }
-
-void handleRequest(int sock){
+char **parseCommand(char *command)
+{
     /**
-	 * This function takes an active socket with an accepted connection, receives commands from the client,
-     *   calls a function to parse the commands, then calls respective functions completing the commands
+	 * This function takes the command string from the client and parses it into an array
+	 *  Returns the string array [10]
+	 */
+
+    int spaces = 0;
+
+    char *token = strtok(command, " ");
+    char **commandBuffer = NULL;
+
+    // split string and append tokens to 'res'
+    while (token)
+    {
+        commandBuffer = realloc(commandBuffer, sizeof(char *) * ++spaces);
+
+        if (commandBuffer == NULL)
+        {
+            exit(-1); // memory allocation failed
+        }
+
+        commandBuffer[spaces - 1] = token;
+        token = strtok(NULL, " ");
+    }
+
+    // realloc one extra element for the last NULL
+    commandBuffer = realloc(commandBuffer, sizeof(char *) * (spaces + 1));
+    commandBuffer[spaces] = 0;
+
+    return commandBuffer;
+}
+
+void handleRequest(int sock)
+{
+    /**
+	 * This function takes an active socket with an accepted connection, receives a command from the client,
+     *   calls a function to parse the command, then calls respective functions completing the command
      *   and returns the response over a data connection.
      *  
 	 */
-     char clientCommand[500];
-     bzero(clientCommand, 500);
-     recv(sock, clientCommand, 500, 0);
-     printf("%s", clientCommand);
+    char clientCommand[500];
+    bzero(clientCommand, 500);
+    int numberOfArgs = 0;
+    int i = 0;
+    char **args;
+
+    recv(sock, clientCommand, 500, 0);
+
+    args = parseCommand(clientCommand);
+    numberOfArgs = sizeof(args + 1) / sizeof(args[0]);
+    for (i = 0; i < numberOfArgs + 1; i++)
+    {
+        printf("%s\n", args[i]);
+        // free(args[i]);
+    }
+    free(args);
 };
 
 int startup(int port)
@@ -68,9 +106,9 @@ int startup(int port)
 	 * This function takes the port number, initializes a server socket, and returns the active socket file descriptor
 	 */
     struct sockaddr_in serverAddress;
-    int sock;          // socket file descriptor
-    int status;        // generic error response holder
-    int optVal = 1;    // for socket options
+    int sock;       // socket file descriptor
+    int status;     // generic error response holder
+    int optVal = 1; // for socket options
 
     // Initialize the file descriptor of a new socket [1]
     sock = socket(AF_INET, SOCK_STREAM, 0);
@@ -145,12 +183,11 @@ int shutDown();
 
 int main(int argc, char **argv)
 {
-    int portNumber; // port which we use to start server on
-    int controlSocket; // the socket which will start listening for connections
-    int activeSocket; // an instance of controlSocket that is actively accepting connections
-    struct sockaddr_storage clientAddr;  // store information about the incoming connection
-    socklen_t addressSize;  // a generic variable set to the size of a sockaddr struct
-
+    int portNumber;                     // port which we use to start server on
+    int controlSocket;                  // the socket which will start listening for connections
+    int activeSocket;                   // an instance of controlSocket that is actively accepting connections
+    struct sockaddr_storage clientAddr; // store information about the incoming connection
+    socklen_t addressSize;              // a generic variable set to the size of a sockaddr struct
 
     // Must have exactly two args
     if (argc != 2)
@@ -170,23 +207,28 @@ int main(int argc, char **argv)
     // build a listening controlSocket with the startup function
     controlSocket = startup(portNumber);
 
-    while (1) {
-        fflush(stdout); 
+    while (1)
+    {
+        fflush(stdout);
         // spin off another socket for an active connection
         activeSocket = accept(controlSocket, (struct sockaddr *)&clientAddr, &addressSize);
-        if (activeSocket < 0) {
+        if (activeSocket < 0)
+        {
             fprintf(stderr, "Connection Error: Active Socket Failed to Accept Connection.\n");
-            exit(1); 
+            exit(1);
         }
 
         // the following is simply to retrieve hostname information [8, 9]
         char clientHost[NI_MAXHOST];
         char clientPort[NI_MAXSERV];
         int rc = getnameinfo((struct sockaddr *)&clientAddr, addressSize, clientHost, sizeof(clientHost), clientPort, sizeof(clientPort), 0);
-        if (rc == 0) {
+        if (rc == 0)
+        {
             printf("\n ! Connection from %s\n", clientHost);
-        } else {
-            fprintf(stderr, "There was an error reading hostname.\n");            
+        }
+        else
+        {
+            fprintf(stderr, "There was an error reading hostname.\n");
         }
 
         handleRequest(activeSocket);
