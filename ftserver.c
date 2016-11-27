@@ -3,12 +3,16 @@
  * CS 372 Networking Fall 2016
  * Program 2 - File Transfer (Server Component)
  * 27 November 2016
- * References: [1] http://beej.us/guide/bgnet/
- *			   [2] Advanced Programming in the UNIX Environment, 3rd Edition by W. Richard Stevens
- *			   [3] http://stackoverflow.com/questions/4072190/check-if-input-is-integer-type-in-c
- *             [4] https://linux.die.net/man/2/read 
- *			   [5] http://pubs.opengroup.org/onlinepubs/009695399/functions/opendir.html
- *             [6] http://stackoverflow.com/questions/4204666/how-to-list-files-in-a-directory-in-a-c-program
+ * Sources Cited:
+ *  [1] http://beej.us/guide/bgnet/
+ *	[2] Advanced Programming in the UNIX Environment, 3rd Edition by W. Richard Stevens
+ *	[3] http://stackoverflow.com/questions/4072190/check-if-input-is-integer-type-in-c
+ *  [4] https://linux.die.net/man/2/read 
+ *	[5] http://pubs.opengroup.org/onlinepubs/009695399/functions/opendir.html
+ *  [6] http://stackoverflow.com/questions/4204666/how-to-list-files-in-a-directory-in-a-c-program
+ *  [7] http://pubs.opengroup.org/onlinepubs/009695399/functions/bzero.html
+ *  [8] http://stackoverflow.com/questions/12810587/extracting-ip-address-and-port-info-from-sockaddr-storage
+ *  [9] http://man7.org/linux/man-pages/man3/getnameinfo.3.html
  **/
 
 #include <stdio.h>
@@ -19,6 +23,7 @@
 #include <sys/socket.h>
 #include <unistd.h>
 #include <dirent.h>
+#include <arpa/inet.h>
 
 int validatePort(char *port)
 {
@@ -35,62 +40,29 @@ int validatePort(char *port)
     return 0;
 }
 
-void handleRequest(int *serverSocket)
-{
+// char **parseCommand(char *command)
+// {
+//     /**
+// 	 * This function takes the command string from the client and parses it into an array
+// 	 *  Returns the string array
+// 	 */
+
+// }
+
+void handleRequest(int sock){
     /**
-	 * This function takes the port number, initializes a server socket, and returns the active socket file descriptor
+	 * This function takes an active socket with an accepted connection, receives commands from the client,
+     *   calls a function to parse the commands, then calls respective functions completing the commands
+     *   and returns the response over a data connection.
+     *  
 	 */
-    char clientBuffer[500];
-    char *token;
-    int argCount = 0;
-    char **clientArgs = (char **)malloc(sizeof(char *) * 512);
-    char *clientCommand;
-    int dataPort;
-    char *file;
-    int status;
-
-    // split client buffer on whitespace to get individual arguments
-    // http://www.cplusplus.com/reference/cstring/strtok/
-    // https://msdn.microsoft.com/en-us/library/2c8d19sb(v=vs.71).aspx
-    token = strtok(clientBuffer, " ");
-    while (token != NULL)
-    {
-        clientArgs[argCount] = token;
-        token = strtok(NULL, " ");
-        argCount++;
-    }
-
-    argCount -= 1; // go one back after the loop to get the last real element
-
-    // the final element should be the dataPort number
-    status = validatePort(clientArgs[argCount]);
-    if (status < 0)
-    {
-        fprintf(stderr, "Error: Client passed bad data port number '%s'", clientArgs[argCount]);
-        exit(1);
-    }
-    dataPort = atoi(clientArgs[argCount]); // set final argument to dataPort number
-    clientCommand = clientArgs[0];
-    // More than 2 arguments indicates a file
-    if (argCount > 1)
-    {
-        // file should always be second arg
-        file = clientArgs[1];
-    }
-    if (strcmp(clientCommand, "-l") == 0)
-    {
-    }
-    else if (strcmp(clientCommand, "-g") == 0)
-    {
-        // get file
-    }
-    else
-    {
-        // bad command
-    }
+     char clientCommand[500];
+     bzero(clientCommand, 500);
+     recv(sock, clientCommand, 500, 0);
+     printf("%s", clientCommand);
 };
 
-void startup(int port)
+int startup(int port)
 {
     /**
 	 * This function takes the port number, initializes a server socket, and returns the active socket file descriptor
@@ -99,10 +71,8 @@ void startup(int port)
     int sock;          // socket file descriptor
     int status;        // generic error response holder
     int optVal = 1;    // for socket options
-    int controlSocket; // our main TCP socket for transactions
 
-    // Initialize the file descriptor of a new socket
-    // http://beej.us/guide/bgnet/output/html/multipage/syscalls.html#socket
+    // Initialize the file descriptor of a new socket [1]
     sock = socket(AF_INET, SOCK_STREAM, 0);
     if (sock < 0)
     {
@@ -115,17 +85,15 @@ void startup(int port)
     serverAddress.sin_port = htons(port);                                // set port, convert to Big-Endian Network Byte Order
     memset(serverAddress.sin_zero, '\0', sizeof serverAddress.sin_zero); // clear memory for the serverAddress
 
-    // this socket option allows other sockets to bind on this port
-    // http://beej.us/guide/bgnet/output/html/multipage/setsockoptman.html
+    // this socket option allows other sockets to bind on this port [1]
     status = setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &optVal, sizeof(int));
     if (status < 0)
     {
-        fprintf(stderr, "Socket Error: Error initializing socket reuse.\n");
+        fprintf(stderr, "Socket Error: Error initializing socket reusability.\n");
         exit(1);
     }
 
-    // this is where we bind our socket to the local port
-    // http://beej.us/guide/bgnet/output/html/multipage/syscalls.html#bind
+    // this is where we bind our socket to the local port [1]
     status = bind(sock, (struct sockaddr *)&serverAddress, sizeof(serverAddress));
     if (status < 0)
     {
@@ -133,8 +101,7 @@ void startup(int port)
         exit(1);
     }
 
-    // now we're actually a server because we're listening to connections (arbitrarily set to 5)
-    // http://beej.us/guide/bgnet/output/html/multipage/syscalls.html#listen
+    // now we're actually a server because we're listening to connections (arbitrarily set to 5) [1]
     status = listen(sock, 5);
     if (status < 0)
     {
@@ -142,22 +109,9 @@ void startup(int port)
         exit(1);
     }
 
-    printf("\nFile Transfer Server Listening on Port %d", port);
+    printf("\nFile Transfer Server Listening on Port %d...\n", port);
 
-    // start up the TCP control connection
-    while (1)
-    {
-        struct sockaddr_storage clientAddress;
-        socklen_t addr_size;
-
-        controlSocket = accept(sock, (struct sockaddr *)&clientAddress, &addr_size);
-        if (controlSocket < 0)
-        {
-            fprintf(stderr, "Error Establishing TCP Control Socket.");
-            exit(1);
-        }
-        printf("Connection Opened.");
-    }
+    return sock;
 };
 
 void listFilesCmd(int *controlSock, int *dataSock)
@@ -168,7 +122,7 @@ void listFilesCmd(int *controlSock, int *dataSock)
     int status = 0;
     char directoryListing[500];
     memset(directoryListing, '\0', 500);
-    // http://stackoverflow.com/questions/4204666/how-to-list-files-in-a-directory-in-a-c-program
+    // List directories [6]
     DIR *d;
     struct dirent *dir;
     d = opendir(".");
@@ -192,6 +146,11 @@ int shutDown();
 int main(int argc, char **argv)
 {
     int portNumber; // port which we use to start server on
+    int controlSocket; // the socket which will start listening for connections
+    int activeSocket; // an instance of controlSocket that is actively accepting connections
+    struct sockaddr_storage clientAddr;  // store information about the incoming connection
+    socklen_t addressSize;  // a generic variable set to the size of a sockaddr struct
+
 
     // Must have exactly two args
     if (argc != 2)
@@ -206,9 +165,38 @@ int main(int argc, char **argv)
         fprintf(stderr, "Error: Port Number must be an integer between 1024 and 65535 and not 30021 or 30020, you passed: '%s'\n", argv[1]);
         exit(1);
     }
-
+    // after validation, read in port for real
     portNumber = atoi(argv[1]);
-    startup(portNumber);
+    // build a listening controlSocket with the startup function
+    controlSocket = startup(portNumber);
+
+    while (1) {
+        fflush(stdout); 
+        // spin off another socket for an active connection
+        activeSocket = accept(controlSocket, (struct sockaddr *)&clientAddr, &addressSize);
+        if (activeSocket < 0) {
+            fprintf(stderr, "Connection Error: Active Socket Failed to Accept Connection.\n");
+            exit(1); 
+        }
+
+        // the following is simply to retrieve hostname information [8, 9]
+        char clientHost[NI_MAXHOST];
+        char clientPort[NI_MAXSERV];
+        int rc = getnameinfo((struct sockaddr *)&clientAddr, addressSize, clientHost, sizeof(clientHost), clientPort, sizeof(clientPort), 0);
+        if (rc == 0) {
+            printf("\n ! Connection from %s\n", clientHost);
+        } else {
+            fprintf(stderr, "There was an error reading hostname.\n");            
+        }
+
+        handleRequest(activeSocket);
+
+        // make sure to cleanup
+        close(activeSocket);
+    }
+
+    // make sure to cleanup
+    close(controlSocket);
 
     exit(0);
 }

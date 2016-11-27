@@ -8,13 +8,74 @@ Program 2 - File Transfer (Client Component)
 References:
 [1] https://docs.python.org/2/howto/sockets.html
 [2] http://stackoverflow.com/questions/10019456/usage-of-sys-stdout-flush-method
-[3] https://docs.python.org/2/howto/argparse.html 
+[3] https://docs.python.org/2/howto/argparse.html
+[4] https://docs.python.org/2/library/socketserver.html
 """
 
 import argparse
 import socket
-import getopt
+import SocketServer
 import sys
+
+
+class TCPDataHandler(SocketServer.BaseRequestHandler):
+    """
+    The request handler class for our server. [4]
+
+    It is instantiated once per connection to the server, and must
+    override the handle() method to implement communication to the
+    client.
+    """
+    command = ""
+    host = ""
+    port = 0
+    filename = ""
+
+    def receive_directories(data=None):
+        """
+        This function takes a socket and prints directory contents from server to stdout
+        """
+        print("Receiving directory structure from {0}:{1}".format(this.host, this.port))
+
+        if not data:
+            print("Server Error: No directory information received.")
+            sys.exit(1)
+
+        sys.stdout.write(data)
+        # http://stackoverflow.com/questions/10019456/usage-of-sys-stdout-flush-method
+        sys.stdout.flush()
+
+    def receive_file(data=None):
+        """
+        This function takes a socket and prints directory contents from server to stdout
+        """
+        print("Receiving file '{0}' from {1}:{2}".format(this.filename, this.host, this.port))
+
+        if not data:
+            # if unhandled error occurs
+            print("Server Error: No file received.")
+            sys.exit(1)
+        elif "Error" in data:
+            # if file not found error thrown from server
+            print data
+            sys.exit(1)
+
+        # open the requested filename and write data stream to file (overwrite mode with 'w+')
+        with open(this.filename, "w+") as outfile:
+            outfile.write(data)
+
+        print("File Transfer Complete.")
+
+    def handle(self):
+        # self.request is the TCP socket connected to the client
+        if command == "-l":
+            this.receive_directories(data=self.request.recv(1024).strip())
+
+        elif command == "-g":
+            this.receive_file(data=self.request.recv(1024).strip())
+
+        else:
+            print("Invalid command handle triggered.")
 
 
 def initiate_contact(host=None, port=None):
@@ -50,7 +111,7 @@ def make_request(sock=None, command=None, filename=None, port=None):
 
 def user_input():
     """
-    Using the argparse module, get/validate command-line input from the user
+    Using the argparse module, get/validate command-line input from the user [3]
     """
     parser = argparse.ArgumentParser()
     parser.add_argument("--server_host", "-sh", help="specify host you want to connect to", type=str, required=True)
@@ -85,41 +146,18 @@ def user_input():
     return (server_host, server_port, command, filename, data_port)
 
 
-def receive_directories(sock=None):
+def setup_data_connection(host=None, port=None, command=None, filename=None):
     """
-    This function takes a socket and prints directory contents from server to stdout
+    This function takes a host and (data) port and sets up a TCPServer data connection
+    with the host to begin accepting files [4]
     """
-    data = sock.recv(4096)
+    TCPDataHandler.host = host
+    TCPDataHandler.port = port
+    TCPDataHandler.command = command
+    TCPDataHandler.filename = filename
+    data_connection = SocketServer.TCPServer((host, port), TCPDataHandler)
 
-    if not data:
-        print("Server Error: No directory information received.")
-        sys.exit(1)
-
-    sys.stdout.write(data)
-    # http://stackoverflow.com/questions/10019456/usage-of-sys-stdout-flush-method
-    sys.stdout.flush()
-
-
-def receive_file(sock=None, filename=None):
-    """
-    This function takes a socket and prints directory contents from server to stdout
-    """
-    data = sock.recv(4096)
-
-    if not data:
-        # if unhandled error occurs
-        print("Server Error: No file received.")
-        sys.exit(1)
-    elif "Error" in data:
-        # if file not found error thrown from server
-        print data
-        sys.exit(1)
-
-    # open the requested filename and write data stream to file (overwrite mode with 'w+')
-    with open(filename, "w+") as outfile:
-        outfile.write(data)
-
-    print("File Transfer Complete.")
+    return data_connection
 
 
 if __name__ == "__main__":
@@ -131,11 +169,9 @@ if __name__ == "__main__":
     # establish a TCP connection
     sock = initiate_contact(host=server_host, port=server_port)
     # send the server the formatted command
-    make_request(sock=sock, command=command, filename=filename, port=data_port)
-
-    if filename:
-        # if there's a filename, set up to receieve file information
-        receive_file(sock=sock, filename=filename)
-    else:
-        # otherwise we've made a directory request
-        receive_directories(sock=sock)
+    make_request(sock=sock, command=command, filename=filename, port=server_port)
+    # setup data connection with SocketServer class
+    data_connection = setup_data_connection(host=server_host, port=data_port, command=command, filename=filename)
+    # cleanup
+    data_connection.server_close()
+    sock.close()
