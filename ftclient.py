@@ -36,26 +36,27 @@ class TCPDataHandler(SocketServer.BaseRequestHandler):
         This function takes a socket and prints directory contents from server to stdout
         """
         data = self.request.recv(1024).strip()
-        print("Receiving directory structure from {0}:{1}".format(self.host, self.port))
+        print("\n     *** Receiving directory structure from {0}:{1}".format(self.host, self.port))
 
         if not data:
-            print("Server Error: No directory information received.")
+            print("\n       ! Server Error: No directory information received.")
             sys.exit(1)
 
         sys.stdout.write(data)
         # http://stackoverflow.com/questions/10019456/usage-of-sys-stdout-flush-method
         sys.stdout.flush()
+        print("\n     *** Directory Contents Received.")
 
     def receive_file(self):
         """
         This function takes a socket and prints directory contents from server to stdout
         """
         data = self.request.recv(1024).strip()
-        print("Receiving file '{0}' from {1}:{2}".format(self.filename, self.host, self.port))
+        print("\n     *** Receiving file '{0}' from {1}:{2}".format(self.filename, self.host, self.port))
 
         if not data:
             # if unhandled error occurs
-            print("Server Error: No file received.")
+            print("\n       ! Server Error: No file received.")
             sys.exit(1)
         elif "Error" in data:
             # if file not found error thrown from server
@@ -66,9 +67,10 @@ class TCPDataHandler(SocketServer.BaseRequestHandler):
         with open(self.filename, "w+") as outfile:
             outfile.write(data)
 
-        print("File Transfer Complete.")
+        print("\n  *** File Transfer Complete.")
 
     def handle(self):
+        print("\n  ++ Established Data Connection to {0}:{1}.".format(self.host, self.port))
         # self.request is the TCP socket connected to the client
         if command == "-l":
             self.receive_directories()
@@ -77,7 +79,7 @@ class TCPDataHandler(SocketServer.BaseRequestHandler):
             self.receive_file()
 
         else:
-            print("Invalid command handle triggered.")
+            print("\n   ! Invalid command handle triggered.")
 
 
 def initiate_contact(host=None, port=None):
@@ -90,10 +92,10 @@ def initiate_contact(host=None, port=None):
     try:
         sock.connect((host, port))
     except:
-        print("Failed to connect to ({0}, {1})".format(host, port))
+        print("\nFailed to connect to ({0}, {1})".format(host, port))
         sys.exit(1)
 
-    print("+ Connected to {0}:{1}.".format(host, port))
+    print("\n+ Established Control Connection with {0}:{1}.".format(host, port))
     return sock
 
 
@@ -107,7 +109,7 @@ def make_request(sock=None, command=None, filename=None, port=None):
     else:
         full_command = "{0} {1}".format(command, data_port)
 
-    print("   + Issuing Server Command: '{}'".format(full_command))
+    print("\n  *** Issuing Server Command: '{}'".format(full_command))
     sock.send(full_command)
 
 
@@ -177,4 +179,6 @@ if __name__ == "__main__":
     data_connection.handle_request()
     # cleanup
     data_connection.server_close()
+    print("\n  -- Closed Data Connection to {0}:{1}.".format(server_host, data_port))
     sock.close()
+    print("\n- Closed Control Connection to {0}:{1}.".format(server_host, server_port))

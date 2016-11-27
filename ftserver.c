@@ -14,6 +14,7 @@
  *  [8] http://stackoverflow.com/questions/12810587/extracting-ip-address-and-port-info-from-sockaddr-storage
  *  [9] http://man7.org/linux/man-pages/man3/getnameinfo.3.html
  *  [10] http://stackoverflow.com/questions/11198604/c-split-string-into-an-array-of-strings
+ *  [11] http://stackoverflow.com/questions/4217037/catch-ctrl-c-in-c
  **/
 
 #include <stdio.h>
@@ -25,6 +26,10 @@
 #include <unistd.h>
 #include <dirent.h>
 #include <arpa/inet.h>
+#include <signal.h>
+
+// this global variable is for SIGTERM handling [11]
+static volatile int done = 0;
 
 int validatePort(char *port)
 {
@@ -97,7 +102,7 @@ void listFilesCmd(int dataSock)
     status = send(dataSock, directoryListing, 500, 0);
     if (status < 0)
     {
-        fprintf(stderr, "Error sending directory listing.");
+        fprintf(stderr, "     !  Error sending directory listing.");
     }
 }
 
@@ -134,7 +139,7 @@ int handleRequest(int sock, char *client)
         status = validatePort(dataPort);
         if (status < 0)
         {
-            fprintf(stderr, "Error: Data Port Number must be an integer between 1024 and 65535 and not 30021 or 30020, you passed: '%s'\n", args[1]);
+            fprintf(stderr, "   ! Error: Data Port Number must be an integer between 1024 and 65535 and not 30021 or 30020, you passed: '%s'\n", args[1]);
         }
         commandType = 1;
     }
@@ -144,7 +149,7 @@ int handleRequest(int sock, char *client)
         status = validatePort(dataPort);
         if (status < 0)
         {
-            fprintf(stderr, "Error: Data Port Number must be an integer between 1024 and 65535 and not 30021 or 30020, you passed: '%s'\n", args[1]);
+            fprintf(stderr, "   ! Error: Data Port Number must be an integer between 1024 and 65535 and not 30021 or 30020, you passed: '%s'\n", args[1]);
         }
         commandType = 2;
     }
@@ -179,10 +184,12 @@ int handleRequest(int sock, char *client)
         printf("   ! Connection Error: Could not establish data connection with %s:%s\n", client, dataPort);
         return -1;
     }
+    printf("\n  ++  Data Connection Established with %s:%s\n", client, dataPort);
 
     if (commandType == 1)
     {
         listFilesCmd(dataSocket);
+        printf("\n   ***  Sending directory contents to %s:%s\n", client, dataPort);
     }
     else
     {
@@ -190,6 +197,8 @@ int handleRequest(int sock, char *client)
     }
 
     free(args);
+    close(dataSocket);
+    printf("\n  --  Data Connection Closed with %s:%s\n", client, dataPort);
 
     return 0;
 };
@@ -251,11 +260,15 @@ int startup(char *port)
     return sockfd;
 };
 
-int shutDown();
+void shutDown(int signum)
+{
+    done = 1;
+    printf("\nServer will shut down after next request...\n");
+}
 
 int main(int argc, char **argv)
 {
-    char *port;                     // port which we use to start server on
+    char *port;                         // port which we use to start server on
     int controlSocket;                  // the socket which will start listening for connections
     int activeSocket;                   // an instance of controlSocket that is actively accepting connections
     struct sockaddr_storage clientAddr; // store information about the incoming connection
@@ -284,7 +297,10 @@ int main(int argc, char **argv)
         controlSocket = startup(port);
     }
 
-    while (1)
+    // SetUp SIGTERM handling so we can exit gracefully when the user enters Ctrl+C [11]
+    signal(SIGINT, shutDown);
+
+    while (done == 0)
     {
         fflush(stdout);
         // spin off another socket for an active connection
@@ -301,7 +317,7 @@ int main(int argc, char **argv)
         int rc = getnameinfo((struct sockaddr *)&clientAddr, addressSize, clientHost, sizeof(clientHost), clientPort, sizeof(clientPort), 0);
         if (rc == 0)
         {
-            printf("\n + Connection from %s\n\n", clientHost);
+            printf("\n + Connection from %s\n", clientHost);
         }
         else
         {
@@ -321,6 +337,8 @@ int main(int argc, char **argv)
 
     // make sure to cleanup
     close(controlSocket);
+    printf("\nCleanup done. Bye!\n");
+    fflush(stdout);
 
     exit(0);
 }
