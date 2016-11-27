@@ -61,7 +61,7 @@ class TCPDataHandler(SocketServer.BaseRequestHandler):
             sys.exit(1)
 
         # open the requested filename and write data stream to file (overwrite mode with 'w+')
-        with open(this.filename, "w+") as outfile:
+        with open(self.filename, "w+") as outfile:
             outfile.write(data)
 
         print("File Transfer Complete.")
@@ -69,10 +69,10 @@ class TCPDataHandler(SocketServer.BaseRequestHandler):
     def handle(self):
         # self.request is the TCP socket connected to the client
         if command == "-l":
-            this.receive_directories(data=self.request.recv(1024).strip())
+            self.receive_directories(data=self.request.recv(1024).strip())
 
         elif command == "-g":
-            this.receive_file(data=self.request.recv(1024).strip())
+            self.receive_file(data=self.request.recv(1024).strip())
 
         else:
             print("Invalid command handle triggered.")
@@ -101,9 +101,9 @@ def make_request(sock=None, command=None, filename=None, port=None):
     """
     # full_command string differs based on whether or not there is a filename
     if filename:
-        full_command = "{0} {1} {2}".format(command, filename, port)
+        full_command = "{0} {1} {2}".format(command, filename, data_port)
     else:
-        full_command = "{0} {1}".format(command, port)
+        full_command = "{0} {1}".format(command, data_port)
 
     print("! --- Issuing Server Command: '{}'".format(full_command))
     sock.send(full_command)
@@ -172,6 +172,7 @@ if __name__ == "__main__":
     make_request(sock=sock, command=command, filename=filename, port=server_port)
     # setup data connection with SocketServer class
     data_connection = setup_data_connection(host=server_host, port=data_port, command=command, filename=filename)
+    data_connection.handle_request()
     # cleanup
     data_connection.server_close()
     sock.close()

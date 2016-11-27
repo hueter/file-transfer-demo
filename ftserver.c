@@ -74,7 +74,34 @@ char **parseCommand(char *command)
     return commandBuffer;
 }
 
-void handleRequest(int sock)
+void listFilesCmd(int dataSock)
+{
+    /**
+	* This pointers to the control and data sockets and sends a directory listing
+	*/
+    int status = 0;
+    char directoryListing[500];
+    memset(directoryListing, '\0', 500);
+    // List directories [6]
+    DIR *d;
+    struct dirent *dir;
+    d = opendir(".");
+    if (d)
+    {
+        while ((dir = readdir(d)) != NULL)
+        {
+            strcat(directoryListing, dir->d_name);
+            strcat(directoryListing, "\n");
+        }
+    }
+    status = send(dataSock, directoryListing, 500, 0);
+    if (status < 0)
+    {
+        fprintf(stderr, "Error sending directory listing.");
+    }
+}
+
+int handleRequest(int sock, char *client)
 {
     /**
 	 * This function takes an active socket with an accepted connection, receives a command from the client,
@@ -85,19 +112,84 @@ void handleRequest(int sock)
     char clientCommand[500];
     bzero(clientCommand, 500);
     int numberOfArgs = 0;
-    int i = 0;
     char **args;
+    int dataSocket;
+    int dataPort;
+    struct sockaddr_in receiverAddress;
+    struct hostent *receiver;
+    int status;
+    int commandType = 0;
 
     recv(sock, clientCommand, 500, 0);
 
     args = parseCommand(clientCommand);
-    numberOfArgs = sizeof(args + 1) / sizeof(args[0]);
-    for (i = 0; i < numberOfArgs + 1; i++)
-    {
-        printf("%s\n", args[i]);
-        // free(args[i]);
+    while (args[numberOfArgs] != NULL) {
+        numberOfArgs++;
     }
+
+    if (numberOfArgs == 2)
+    {
+        status = validatePort(args[1]);
+        if (status < 0)
+        {
+            fprintf(stderr, "Error: Data Port Number must be an integer between 1024 and 65535 and not 30021 or 30020, you passed: '%s'\n", args[1]);
+        }
+        dataPort = atoi(args[1]);
+        commandType = 1;
+    }
+    else
+    {
+        status = validatePort(args[2]);
+        if (status < 0)
+        {
+            fprintf(stderr, "Error: Data Port Number must be an integer between 1024 and 65535 and not 30021 or 30020, you passed: '%s'\n", args[1]);
+        }
+        dataPort = atoi(args[2]);
+        commandType = 2;
+    }
+
+    // Get the Socket file descriptor
+    dataSocket = socket(AF_INET, SOCK_STREAM, 0);
+    if (dataSocket < 0)
+    {
+        fprintf(stderr, "   ! Socket Error: Error initializing data socket.\n");
+        return -1;
+    }
+
+    // setup new socket
+    receiver = gethostbyname(client);
+	if (receiver == NULL) {
+		fprintf(stderr, "   ! Connection Error: Client host not reachable.\n");
+		return -1;
+	}
+    // allocate memory for server
+   	bzero((char *) &receiverAddress, sizeof(receiverAddress));
+	// IPv4
+    receiverAddress.sin_family = AF_INET;
+	// bcopy - copy byte sequence of server address 
+    bcopy((char *)receiver->h_addr, (char *)&receiverAddress.sin_addr.s_addr, receiver->h_length);
+	// Convert multi-byte integer types from host byte order to network byte order 
+	receiverAddress.sin_port = htons(dataPort);
+
+    status = connect(dataSocket, (struct sockaddr *)&receiverAddress, sizeof(struct sockaddr));
+    if (status < 0)
+    {
+        printf("   ! Connection Error: Could not establish data connection with %s:%d\n", client, dataPort);
+        return -1;
+    }
+
+    if (commandType == 1)
+    {
+        listFilesCmd(dataSocket);
+    }
+    else
+    {
+        printf("I'm a teapot.");
+    }
+
     free(args);
+
+    return 0;
 };
 
 int startup(int port)
@@ -152,33 +244,6 @@ int startup(int port)
     return sock;
 };
 
-void listFilesCmd(int *controlSock, int *dataSock)
-{
-    /**
-	* This pointers to the control and data sockets and sends a directory listing
-	*/
-    int status = 0;
-    char directoryListing[500];
-    memset(directoryListing, '\0', 500);
-    // List directories [6]
-    DIR *d;
-    struct dirent *dir;
-    d = opendir(".");
-    if (d)
-    {
-        while ((dir = readdir(d)) != NULL)
-        {
-            strcat(directoryListing, dir->d_name);
-            strcat(directoryListing, "\n");
-        }
-    }
-    status = send(*controlSock, directoryListing, 500, 0);
-    if (status < 0)
-    {
-        fprintf(stderr, "Error sending directory listing.");
-    }
-}
-
 int shutDown();
 
 int main(int argc, char **argv)
@@ -188,6 +253,7 @@ int main(int argc, char **argv)
     int activeSocket;                   // an instance of controlSocket that is actively accepting connections
     struct sockaddr_storage clientAddr; // store information about the incoming connection
     socklen_t addressSize;              // a generic variable set to the size of a sockaddr struct
+    int status = 0;
 
     // Must have exactly two args
     if (argc != 2)
@@ -224,17 +290,22 @@ int main(int argc, char **argv)
         int rc = getnameinfo((struct sockaddr *)&clientAddr, addressSize, clientHost, sizeof(clientHost), clientPort, sizeof(clientPort), 0);
         if (rc == 0)
         {
-            printf("\n ! Connection from %s\n", clientHost);
+            printf("\n + Connection from %s\n\n", clientHost);
         }
         else
         {
-            fprintf(stderr, "There was an error reading hostname.\n");
+            fprintf(stderr, "   ! Connection Error: There was an error reading hostname.\n");
         }
 
-        handleRequest(activeSocket);
+        status = handleRequest(activeSocket, clientHost);
+        if (status < 0)
+        {
+            fprintf(stderr, "   ! Connection Error: There was an error handling the connection.\n");
+        }
 
         // make sure to cleanup
         close(activeSocket);
+        printf("\n - Connection to %s closed\n", clientHost);
     }
 
     // make sure to cleanup
