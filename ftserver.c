@@ -178,6 +178,7 @@ int handleRequest(int sock, char *client)
     // Convert multi-byte integer types from host byte order to network byte order
     receiverAddress.sin_port = htons(atoi(dataPort));
 
+    sleep(1);
     status = connect(dataSocket, (struct sockaddr *)&receiverAddress, sizeof(struct sockaddr));
     if (status < 0)
     {

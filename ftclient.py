@@ -27,7 +27,7 @@ class TCPDataHandler(SocketServer.BaseRequestHandler):
     client.
     """
     command = ""
-    host = ""
+    their_host = ""
     port = 0
     filename = ""
 
@@ -36,7 +36,7 @@ class TCPDataHandler(SocketServer.BaseRequestHandler):
         This function takes a socket and prints directory contents from server to stdout
         """
         data = self.request.recv(1024).strip()
-        print("\n     *** Receiving directory structure from {0}:{1}".format(self.host, self.port))
+        print("\n     *** Receiving directory structure from {0}:{1}".format(self.their_host, self.port))
 
         if not data:
             print("\n       ! Server Error: No directory information received.")
@@ -52,7 +52,7 @@ class TCPDataHandler(SocketServer.BaseRequestHandler):
         This function takes a socket and prints directory contents from server to stdout
         """
         data = self.request.recv(1024).strip()
-        print("\n     *** Receiving file '{0}' from {1}:{2}".format(self.filename, self.host, self.port))
+        print("\n     *** Receiving file '{0}' from {1}:{2}".format(self.filename, self.their_host, self.port))
 
         if not data:
             # if unhandled error occurs
@@ -70,7 +70,7 @@ class TCPDataHandler(SocketServer.BaseRequestHandler):
         print("\n  *** File Transfer Complete.")
 
     def handle(self):
-        print("\n  ++ Established Data Connection to {0}:{1}.".format(self.host, self.port))
+        print("\n  ++ Established Data Connection to {0}:{1}.".format(self.their_host, self.port))
         # self.request is the TCP socket connected to the client
         if command == "-l":
             self.receive_directories()
@@ -150,15 +150,16 @@ def user_input():
     return (server_host, server_port, command, filename, data_port)
 
 
-def setup_data_connection(host=None, port=None, command=None, filename=None):
+def setup_data_connection(their_host=None, port=None, command=None, filename=None):
     """
     This function takes a host and (data) port and sets up a TCPServer data connection
     with the host to begin accepting files [4]
     """
-    TCPDataHandler.host = host
+    TCPDataHandler.their_host = their_host
     TCPDataHandler.port = port
     TCPDataHandler.command = command
     TCPDataHandler.filename = filename
+    host = socket.gethostname()
     data_connection = SocketServer.TCPServer((host, port), TCPDataHandler)
 
     return data_connection
@@ -175,7 +176,7 @@ if __name__ == "__main__":
     # send the server the formatted command
     make_request(sock=sock, command=command, filename=filename, port=server_port)
     # setup data connection with SocketServer class
-    data_connection = setup_data_connection(host=server_host, port=data_port, command=command, filename=filename)
+    data_connection = setup_data_connection(their_host=server_host, port=data_port, command=command, filename=filename)
     data_connection.handle_request()
     # cleanup
     data_connection.server_close()
