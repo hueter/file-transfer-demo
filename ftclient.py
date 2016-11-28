@@ -59,9 +59,9 @@ class TCPDataHandler(SocketServer.BaseRequestHandler):
 
         while True:
             # we're going to receive 4096 bytes at a time
-            data = self.request.recv(4096).strip()
+            data = self.request.recv(4096)
             # if error break
-            if "Error" in data:
+            if data[:5] == "Error":
                 print("\n       ! {}".format(data))
                 return
             # EOF break out
@@ -69,7 +69,7 @@ class TCPDataHandler(SocketServer.BaseRequestHandler):
                 break
             else:
                 # open the requested filename and write data stream to file (append mode with 'a')
-                with open(self.filename, "a") as outfile:
+                with open(self.filename, "ab") as outfile:
                     outfile.write(data)
 
         print("\n     *** File Transfer Complete.")
@@ -171,6 +171,7 @@ def setup_data_connection(their_host=None, port=None, command=None, filename=Non
     TCPDataHandler.command = command
     TCPDataHandler.filename = filename
     host = socket.gethostname()
+    SocketServer.TCPServer.allow_reuse_address = True
     data_connection = SocketServer.TCPServer((host, port), TCPDataHandler)
 
     return data_connection

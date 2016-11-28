@@ -43,7 +43,21 @@ int validatePort(char *port)
 	 *  Return 1 if validation error, or 0 if it's OK
 	 */
     int portNumber = atoi(port);
-    if ((isdigit(portNumber) != 0) || (portNumber < 1024) || portNumber > 65535 || portNumber == 30021 || portNumber == 30020)
+
+    // sorry for the verboseness, had to debug this one quite a few times
+    if (portNumber < 1024)
+    {
+        return -1;
+    }
+    else if (portNumber > 65535)
+    {
+        return -1;
+    }
+    else if (portNumber == 30021)
+    {
+        return -1;
+    }
+    else if (portNumber == 30020)
     {
         return -1;
     }
@@ -122,7 +136,7 @@ int sendFileCmd(int dataSock, char *filename)
     fd = open(filename, O_RDONLY);
     if (fd < 0)
     {
-        fprintf(stderr, "     !  Error: File Not Found.");
+        fprintf(stderr, "\n     !  Error: Client-Requested File Not Found.\n");
         write(dataSock, fileNotFound, 23);
         return -1;
     }
@@ -397,11 +411,7 @@ int main(int argc, char **argv)
             fprintf(stderr, "\n   ! Connection Error: There was an error reading hostname.\n");
         }
 
-        status = handleRequest(activeSocket, clientHost);
-        if (status < 0)
-        {
-            fprintf(stderr, "\n   ! Connection Error: There was an error handling the connection.\n");
-        }
+        handleRequest(activeSocket, clientHost);
 
         // make sure to cleanup
         close(activeSocket);
