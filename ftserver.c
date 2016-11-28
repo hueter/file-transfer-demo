@@ -15,8 +15,8 @@
  *  [9] http://man7.org/linux/man-pages/man3/getnameinfo.3.html
  *  [10] http://stackoverflow.com/questions/11198604/c-split-string-into-an-array-of-strings
  *  [11] http://stackoverflow.com/questions/4217037/catch-ctrl-c-in-c
- *  [12] http://stackoverflow.com/questions/8236/how-do-you-determine-the-size-of-a-file-in-c
- *  [13] http://stackoverflow.com/questions/2709713/how-to-convert-unsigned-long-to-string
+ *  [12] https://en.wikibooks.org/wiki/A_Little_C_Primer/C_File-IO_Through_System_Calls
+ *  [13] http://stackoverflow.com/questions/2014033/send-and-receive-a-file-in-socket-programming-in-linux-with-c-c-gcc-g
  **/
 
 #include <stdio.h>
@@ -32,24 +32,9 @@
 #include <fcntl.h>
 #include <sys/types.h>
 #include <sys/stat.h>
-#include <sys/mman.h>
 
 // this global variable is for SIGTERM handling [11]
 static volatile int done = 0;
-
-off_t getFileSize(const char *filename)
-{
-    /**
-	 * This function takes a filename string and returns the size of the file
-	 *  Return -1 if error, or 0 if it's OK
-	 */
-    struct stat st;
-
-    if (stat(filename, &st) == 0)
-        return st.st_size;
-
-    return -1;
-}
 
 int validatePort(char *port)
 {
@@ -131,22 +116,52 @@ int sendFileCmd(int dataSock, char *filename)
     /**
 	* This sends a file over the data socket [12] [13]
 	*/
-
     char fileNotFound[23] = "Error: File not found.\0";
-
-    // first get how long the file is and send file size to client
-    off_t fileLength = getFileSize(filename);
-    if (fileLength == -1)
+    char readError[25] = "Error: File read error.\0";
+    int fd;
+    fd = open(filename, O_RDONLY);
+    if (fd < 0)
     {
-        fprintf(stderr, "\n     !  Error: File '%s' not found on server\n", filename);
-        write(dataSock, fileNotFound, sizeof(fileNotFound));
+        fprintf(stderr, "     !  Error: File Not Found.");
+        write(dataSock, fileNotFound, 23);
         return -1;
     }
-    const int n = snprintf(NULL, 0, "%llu", fileLength);
-    char fileSize[n + 1];
-    sprintf(fileSize, "%llu", fileLength);
-    write(dataSock, fileSize, sizeof(fileSize));
-    sleep(1); // wait 1 second
+    else
+    {
+        char buffer[4096];
+        while (1)
+        {
+            // Read data into buffer.  We may not have enough to fill up buffer, so we
+            // store how many bytes were actually read in bytes_read.
+            int bytes_read = read(fd, buffer, sizeof(buffer));
+            if (bytes_read == 0) // We're done reading from the file
+                break;
+
+            if (bytes_read < 0)
+            {
+                fprintf(stderr, "     !  Error: File Read Error.");
+                write(dataSock, readError, 25);
+                return -1;
+            }
+
+            // You need a loop for the write, because not all of the data may be written
+            // in one call; write will return how many bytes were written. p keeps
+            // track of where in the buffer we are, while we decrement bytes_read
+            // to keep track of how many bytes are left to write.
+            void *p = buffer;
+            while (bytes_read > 0)
+            {
+                int bytes_written = write(dataSock, p, bytes_read);
+                if (bytes_written <= 0)
+                {
+                    fprintf(stderr, "     !  Socket Write Error.");
+                    return -1;
+                }
+                bytes_read -= bytes_written;
+                p += bytes_written;
+            }
+        }
+    }
 
     return 0;
 }
