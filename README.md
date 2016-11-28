@@ -38,12 +38,12 @@ To run the client, you have to pass the keyword arguments as follows:
 
 _Note: The `--file` argument only goes with `-g` command._
  
- #### List Directory Example:
+#### List Directory Example:
  `python ftclient.py --server_host=flip1.engr.oregonstate.edu --server_port=50010 --command=-l --data_port=50011`
 
- #### Get File Example:
+#### Get File Example:
  `python ftclient.py --server_host=flip1.engr.oregonstate.edu --server_port=50011 --command=-g --file=binny.bin --data_port=50011`
 
 ---
- ## Extra Credit
+## Extra Credit
   - My _Get File_ command `-g` works with non-text files. For example, transfer the included binary `binny.bin`.
