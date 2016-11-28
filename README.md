@@ -46,4 +46,8 @@ _Note: The `--file` argument only goes with `-g` command._
 
 ---
 ## Extra Credit
-  - My _Get File_ command `-g` works with non-text files. For example, transfer the included binary `binny.bin`.
+  - _Known Extra Credit:_ The _Get File_ command `-g` works with non-text files. For example, transfer the included binary `binny.bin` or the included image file `kitt.png`. Even the `ftserver.c` works.
+  - _Possible Extras:_
+    - Arguments support short and long forms (e.g. `-c` or `--c`) and have very strict validation
+    - Error handling and interaction messages are graphically-displayed and detailed
+    - Both programs clean up after themselves (close the sockets) and can re-use the same ports over and over
