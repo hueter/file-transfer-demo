@@ -212,7 +212,7 @@ int handleRequest(int sock, char *client)
         status = validatePort(dataPort);
         if (status < 0)
         {
-            fprintf(stderr, "   ! Error: Data Port Number must be an integer between 1024 and 65535 and not 30021 or 30020, you passed: '%s'\n", args[1]);
+            fprintf(stderr, "   ! Error: Data Port Number must be an integer between 1024 and 65535 and not 30021 or 30020, you passed: '%s'\n", args[2]);
         }
         commandType = 2;
     }
