@@ -13,6 +13,7 @@ References:
 """
 
 import argparse
+import os
 import socket
 import SocketServer
 import sys
@@ -30,44 +31,73 @@ class TCPDataHandler(SocketServer.BaseRequestHandler):
     their_host = ""
     port = 0
     filename = ""
+    request_type = "length"
+    file_length = 0
 
     def receive_directories(self):
         """
-        This function takes a socket and prints directory contents from server to stdout
+        This function prints the directory listing
         """
-        data = self.request.recv(1024).strip()
+        data = self.request.recv(4096).strip()
         print("\n     *** Receiving directory structure from {0}:{1}".format(self.their_host, self.port))
 
         if not data:
             print("\n       ! Server Error: No directory information received.")
-            sys.exit(1)
+            return -1
 
         sys.stdout.write(data)
         # http://stackoverflow.com/questions/10019456/usage-of-sys-stdout-flush-method
         sys.stdout.flush()
         print("\n     *** Directory Contents Received.")
 
+    def get_file_length(self):
+        """
+        This function calculates the length of the file about to be received
+        """
+        print("\n     *** Receiving file length of '{0}' from {1}:{2}".format(self.filename, self.their_host, self.port))
+
+        file_length = self.request.recv(500).strip()
+
+        if "Error" in file_length:
+            error = file_length
+            # if file not found error thrown from server
+            print("\n       ! {}".format(error))
+            return -1
+
+        else:
+            self.file_length = file_length
+            self.request_type = "content"
+
+        print("\n     *** File Length is {} bytes.".format(file_length))
+        return 0
+
     def receive_file(self):
         """
         This function takes a socket and prints directory contents from server to stdout
         """
-        data = self.request.recv(1024).strip()
         print("\n     *** Receiving file '{0}' from {1}:{2}".format(self.filename, self.their_host, self.port))
 
-        if not data:
-            # if unhandled error occurs
-            print("\n       ! Server Error: No file received.")
-            sys.exit(1)
-        elif "Error" in data:
-            # if file not found error thrown from server
-            print data
-            sys.exit(1)
+        # check if file already exists
+        if os.path.exists(filename):
+            print("\n       ! Error: File already exists in current directory (duplicate).")
+            return
+        else:
+            # open the requested filename and write data stream to file (overwrite mode with 'w+')
+            with open(self.filename, "w+") as outfile:
 
-        # open the requested filename and write data stream to file (overwrite mode with 'w+')
-        with open(self.filename, "w+") as outfile:
-            outfile.write(data)
+                data = self.request.recv(self.file_length).strip()
 
-        print("\n  *** File Transfer Complete.")
+                if "Error" in data:
+                    error = data
+                    # if file not found error thrown from server
+                    print error
+                    return
+
+                if not data:
+                    print("\n  *** File Transfer Complete.")
+                    return
+
+                outfile.write(data)
 
     def handle(self):
         print("\n  ++ Established Data Connection to {0}:{1}.".format(self.their_host, self.port))
@@ -75,8 +105,10 @@ class TCPDataHandler(SocketServer.BaseRequestHandler):
         if command == "-l":
             self.receive_directories()
 
-        elif command == "-g":
-            self.receive_file()
+        elif command == "-g" and self.request_type == "length":
+            status = self.get_file_length()
+            if status == 0:
+                self.receive_file()
 
         else:
             print("\n   ! Invalid command handle triggered.")
@@ -177,7 +209,9 @@ if __name__ == "__main__":
     make_request(sock=sock, command=command, filename=filename, port=server_port)
     # setup data connection with SocketServer class
     data_connection = setup_data_connection(their_host=server_host, port=data_port, command=command, filename=filename)
+
     data_connection.handle_request()
+
     # cleanup
     data_connection.server_close()
     print("\n  -- Closed Data Connection to {0}:{1}.".format(server_host, data_port))

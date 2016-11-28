@@ -15,6 +15,8 @@
  *  [9] http://man7.org/linux/man-pages/man3/getnameinfo.3.html
  *  [10] http://stackoverflow.com/questions/11198604/c-split-string-into-an-array-of-strings
  *  [11] http://stackoverflow.com/questions/4217037/catch-ctrl-c-in-c
+ *  [12] http://stackoverflow.com/questions/8236/how-do-you-determine-the-size-of-a-file-in-c
+ *  [13] http://stackoverflow.com/questions/2709713/how-to-convert-unsigned-long-to-string
  **/
 
 #include <stdio.h>
@@ -27,9 +29,27 @@
 #include <dirent.h>
 #include <arpa/inet.h>
 #include <signal.h>
+#include <fcntl.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <sys/mman.h>
 
 // this global variable is for SIGTERM handling [11]
 static volatile int done = 0;
+
+off_t getFileSize(const char *filename)
+{
+    /**
+	 * This function takes a filename string and returns the size of the file
+	 *  Return -1 if error, or 0 if it's OK
+	 */
+    struct stat st;
+
+    if (stat(filename, &st) == 0)
+        return st.st_size;
+
+    return -1;
+}
 
 int validatePort(char *port)
 {
@@ -82,7 +102,7 @@ char **parseCommand(char *command)
 void listFilesCmd(int dataSock)
 {
     /**
-	* This pointers to the control and data sockets and sends a directory listing
+	* This sends a directory listing over the data socket
 	*/
     int status = 0;
     char directoryListing[500];
@@ -106,6 +126,31 @@ void listFilesCmd(int dataSock)
     }
 }
 
+int sendFileCmd(int dataSock, char *filename)
+{
+    /**
+	* This sends a file over the data socket [12] [13]
+	*/
+
+    char fileNotFound[23] = "Error: File not found.\0";
+
+    // first get how long the file is and send file size to client
+    off_t fileLength = getFileSize(filename);
+    if (fileLength == -1)
+    {
+        fprintf(stderr, "\n     !  Error: File '%s' not found on server\n", filename);
+        write(dataSock, fileNotFound, sizeof(fileNotFound));
+        return -1;
+    }
+    const int n = snprintf(NULL, 0, "%llu", fileLength);
+    char fileSize[n + 1];
+    sprintf(fileSize, "%llu", fileLength);
+    write(dataSock, fileSize, sizeof(fileSize));
+    sleep(1); // wait 1 second
+
+    return 0;
+}
+
 int handleRequest(int sock, char *client)
 {
     /**
@@ -114,16 +159,17 @@ int handleRequest(int sock, char *client)
      *   and returns the response over a data connection.
      *  
 	 */
-    char clientCommand[500];
+    char clientCommand[500]; // the 500-char string sent by the client program
     bzero(clientCommand, 500);
     int numberOfArgs = 0;
-    char **args;
-    int dataSocket;
-    char *dataPort;
-    struct sockaddr_in receiverAddress;
-    struct hostent *receiver;
-    int status;
-    int commandType = 0;
+    char **args;                        // hold an array of command arguments after splitting
+    int dataSocket;                     // file descriptor for the data connection
+    char *dataPort;                     // string form of the data port
+    char *filename;                     // string to hold filename arg
+    struct sockaddr_in receiverAddress; // container for the client's address
+    struct hostent *receiver;           // struct for all client info
+    int status;                         // generic error handling int
+    int commandType = 0;                // based on # of args, what type of response to sendfile
 
     recv(sock, clientCommand, 500, 0);
 
@@ -133,6 +179,7 @@ int handleRequest(int sock, char *client)
         numberOfArgs++;
     }
 
+    // two arguments implies an "-l" command
     if (numberOfArgs == 2)
     {
         dataPort = args[1];
@@ -143,8 +190,9 @@ int handleRequest(int sock, char *client)
         }
         commandType = 1;
     }
-    else
+    else // otherwise we have a "-g <filename>" command
     {
+        filename = args[1];
         dataPort = args[2];
         status = validatePort(dataPort);
         if (status < 0)
@@ -178,11 +226,12 @@ int handleRequest(int sock, char *client)
     // Convert multi-byte integer types from host byte order to network byte order
     receiverAddress.sin_port = htons(atoi(dataPort));
 
+    // wait 1 second and then connect to client on new socket
     sleep(1);
     status = connect(dataSocket, (struct sockaddr *)&receiverAddress, sizeof(struct sockaddr));
     if (status < 0)
     {
-        printf("   ! Connection Error: Could not establish data connection with %s:%s\n", client, dataPort);
+        fprintf(stderr, "   ! Connection Error: Could not establish data connection with %s:%s\n", client, dataPort);
         return -1;
     }
     printf("\n  ++  Data Connection Established with %s:%s\n", client, dataPort);
@@ -194,7 +243,12 @@ int handleRequest(int sock, char *client)
     }
     else
     {
-        printf("I'm a teapot.");
+        printf("\n   ***  Sending file '%s' contents to %s:%s\n", filename, client, dataPort);
+        status = sendFileCmd(dataSocket, filename);
+        if (status < 0)
+        {
+            return -1;
+        }
     }
 
     free(args);
@@ -263,6 +317,9 @@ int startup(char *port)
 
 void shutDown(int signum)
 {
+    /**
+	 * This is a generic sigterm handler activated when Ctrl-C is pressed. [11]
+	 */
     done = 1;
     printf("\nServer will shut down after next request...\n");
 }
@@ -322,13 +379,13 @@ int main(int argc, char **argv)
         }
         else
         {
-            fprintf(stderr, "   ! Connection Error: There was an error reading hostname.\n");
+            fprintf(stderr, "\n   ! Connection Error: There was an error reading hostname.\n");
         }
 
         status = handleRequest(activeSocket, clientHost);
         if (status < 0)
         {
-            fprintf(stderr, "   ! Connection Error: There was an error handling the connection.\n");
+            fprintf(stderr, "\n   ! Connection Error: There was an error handling the connection.\n");
         }
 
         // make sure to cleanup
